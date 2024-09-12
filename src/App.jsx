@@ -752,6 +752,7 @@ const BankingDashboard = () => {
             </AlertDialog>
           </div>
         );
+        // New function to add more to the transfers
       case 'mobile-deposit':
         return (
           <div>
