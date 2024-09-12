@@ -761,6 +761,7 @@ const BankingDashboard = () => {
                 <CardTitle>Deposit a Check</CardTitle>
               </CardHeader>
               <CardContent>
+                {/* Let add more function to it */}
                 <p>To deposit a check, follow these steps:</p>
                 <ol className="list-decimal list-inside mt-2">
                   <li>Endorse the back of the check</li>
