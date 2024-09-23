@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Line, Doughnut } from 'react-chartjs-2';
 import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, ArcElement, Title, Tooltip, Legend } from 'chart.js';
 import { AlertDialog, AlertDialogTrigger, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction } from "./components/ui/alert-dialog";
@@ -9,7 +9,10 @@ import { Switch } from "./components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./components/ui/select";
 import { Progress } from "./components/ui/progress";
-import { CreditCard, Lock, Unlock, Bell, Mail, Search, ChevronLeft, ChevronRight, DollarSign, Globe, Users, Camera, MessageSquare, Send, Settings as SettingsIcon, Wifi } from 'lucide-react';
+import { Calendar } from "./components/ui/calendar";
+import { CreditCard, Lock, Unlock, Bell, Mail, Search, ChevronLeft, ChevronRight, DollarSign, Globe, Users, Camera, MessageSquare, Send, Settings as SettingsIcon, Wifi, Calendar as CalendarIcon, Upload } from 'lucide-react';
+import { format } from 'date-fns';
+import { Popover, PopoverContent, PopoverTrigger } from "./components/ui/popover";
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, ArcElement, Title, Tooltip, Legend);
 
@@ -33,7 +36,7 @@ const BankingDashboard = () => {
     { id: 2, message: 'You\'ve received a new statement for your savings account.', type: 'info' },
   ]);
   const [virtualCards, setVirtualCards] = useState([
-    { id: 1, last4: '0000', expiryDate: '12/24', spendingLimit: 500, isActive: true },
+    { id: 1, last4: '0000', expiryDate: '12/24', spendingLimit: 500, isActive: true, cvv: '123' },
   ]);
   const [showVirtualCardModal, setShowVirtualCardModal] = useState(false);
   const [newVirtualCardLimit, setNewVirtualCardLimit] = useState('');
@@ -64,6 +67,16 @@ const BankingDashboard = () => {
   const [selectedInvestment, setSelectedInvestment] = useState(null);
   const [showInvestmentModal, setShowInvestmentModal] = useState(false);
   const [activeTab, setActiveTab] = useState('dashboard');
+  const [scheduledTransfers, setScheduledTransfers] = useState([]);
+  const [transferHistory, setTransferHistory] = useState([]);
+  const [transferDate, setTransferDate] = useState(new Date());
+  const [isRecurring, setIsRecurring] = useState(false);
+  const [recurringFrequency, setRecurringFrequency] = useState('weekly');
+  const [depositStep, setDepositStep] = useState(0);
+  const [checkImage, setCheckImage] = useState(null);
+  const [checkAmount, setCheckAmount] = useState('');
+  const [depositAccount, setDepositAccount] = useState('');
+  const [depositHistory, setDepositHistory] = useState([]);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -159,7 +172,8 @@ const BankingDashboard = () => {
         last4: Math.floor(1000 + Math.random() * 9000).toString(),
         expiryDate: `${new Date().getMonth() + 1}/${new Date().getFullYear() + 3}`,
         spendingLimit: parseFloat(newVirtualCardLimit),
-        isActive: true
+        isActive: true,
+        cvv: Math.floor(100 + Math.random() * 900).toString(),
       };
       setVirtualCards(prev => [...prev, newCard]);
       setShowVirtualCardModal(false);
@@ -259,34 +273,148 @@ const BankingDashboard = () => {
     }
   };
 
-  const VirtualCardComponent = ({ card }) => (
-    <Card className="mb-4 relative overflow-hidden w-96 h-56 rounded-xl shadow-lg">
-      <div className="absolute inset-0 bg-gradient-to-br from-purple-600 via-pink-500 to-blue-500"></div>
-      <CardContent className="relative z-10 h-full flex flex-col justify-between p-6">
-        <div className="flex justify-between items-start">
-          <div className="text-white font-bold text-xl">MyBank</div>
-          <Wifi className="text-white" size={24} />
-        </div>
-        <div className="text-white font-mono text-2xl mt-4">
-          5300 **** **** {card.last4}
-        </div>
-        <div className="flex justify-between items-end">
-          <div>
-            <p className="text-white text-xs opacity-75">Valid Thru</p>
-            <p className="text-white font-semibold">{card.expiryDate}</p>
+  const handleScheduleTransfer = () => {
+    if (transferAmount && transferRecipient && transferDate) {
+      const newTransfer = {
+        id: Date.now(),
+        amount: parseFloat(transferAmount),
+        recipient: transferRecipient,
+        date: format(transferDate, 'yyyy-MM-dd'),
+        isRecurring,
+        recurringFrequency: isRecurring ? recurringFrequency : null,
+      };
+      setScheduledTransfers(prev => [...prev, newTransfer]);
+      setTransferAmount('');
+      setTransferRecipient('');
+      setTransferAmount('');
+      setTransferRecipient('');
+      setTransferDate(new Date());
+      setIsRecurring(false);
+      setRecurringFrequency('weekly');
+      setNotifications(prev => [{
+        id: Date.now(),
+        message: `Transfer scheduled for ${format(transferDate, 'MMMM d, yyyy')}`,
+        type: 'success',
+      }, ...prev]);
+    }
+  };
+
+  const handleCancelScheduledTransfer = (id) => {
+    setScheduledTransfers(prev => prev.filter(transfer => transfer.id !== id));
+    setNotifications(prev => [{
+      id: Date.now(),
+      message: 'Scheduled transfer cancelled',
+      type: 'info',
+    }, ...prev]);
+  };
+
+  const handleCheckImageUpload = (event) => {
+    const file = event.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        setCheckImage(e.target.result);
+        // Simulate OCR by setting a random amount after a delay
+        setTimeout(() => {
+          const randomAmount = (Math.random() * 1000).toFixed(2);
+          setCheckAmount(randomAmount);
+        }, 1500);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleDepositSubmit = () => {
+    const newDeposit = {
+      id: Date.now(),
+      amount: parseFloat(checkAmount),
+      date: new Date().toISOString(),
+      account: depositAccount,
+      status: 'Pending',
+    };
+    setDepositHistory(prev => [newDeposit, ...prev]);
+    setAccountBalance(prev => prev + parseFloat(checkAmount));
+    setNotifications(prev => [{
+      id: Date.now(),
+      message: `Check deposit of $${checkAmount} submitted successfully`,
+      type: 'success',
+    }, ...prev]);
+    // Reset deposit process
+    setDepositStep(0);
+    setCheckImage(null);
+    setCheckAmount('');
+    setDepositAccount('');
+  };
+
+  const AnimatedNumber = ({ number }) => {
+    const [displayNumber, setDisplayNumber] = useState(0);
+    const intervalRef = useRef(null);
+  
+    useEffect(() => {
+      let current = 0;
+      intervalRef.current = setInterval(() => {
+        if (current < number) {
+          current += 1;
+          setDisplayNumber(current);
+        } else {
+          clearInterval(intervalRef.current);
+        }
+      }, 50);
+  
+      return () => clearInterval(intervalRef.current);
+    }, [number]);
+  
+    return <span>{displayNumber}</span>;
+  };
+
+  const VirtualCardComponent = ({ card }) => {
+    const [isFlipped, setIsFlipped] = useState(false);
+  
+    return (
+      <div className="mb-4 relative w-96 h-56" onClick={() => setIsFlipped(!isFlipped)}>
+        <div className={`w-full h-full transition-transform duration-500 ${isFlipped ? 'rotate-y-180' : ''}`}>
+          <div className="absolute w-full h-full backface-hidden">
+            <Card className="relative overflow-hidden w-full h-full rounded-xl shadow-lg">
+              <div className="absolute inset-0 bg-gradient-to-br from-purple-600 via-pink-500 to-blue-500"></div>
+              <CardContent className="relative z-10 h-full flex flex-col justify-between p-6">
+                <div className="flex justify-between items-start">
+                  <div className="text-white font-bold text-xl">MyBank</div>
+                  <Wifi className="text-white" size={24} />
+                </div>
+                <div className="text-white font-mono text-2xl mt-4">
+                  5300 <AnimatedNumber number={parseInt(card.last4.slice(0, 4))} /> <AnimatedNumber number={parseInt(card.last4.slice(4, 8))} /> <AnimatedNumber number={parseInt(card.last4.slice(8, 12))} />
+                </div>
+                <div className="flex justify-between items-end">
+                  <div>
+                    <p className="text-white text-xs opacity-75">Valid Thru</p>
+                    <p className="text-white font-semibold">{card.expiryDate}</p>
+                  </div>
+                  <div>
+                    <p className="text-white text-xs opacity-75">Cardholder Name</p>
+                    <p className="text-white font-semibold">JOHN DOE</p>
+                  </div>
+                  <div className="flex space-x-2">
+                    <div className="w-8 h-8 bg-red-500 rounded-full"></div>
+                    <div className="w-8 h-8 bg-yellow-500 rounded-full opacity-80"></div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
           </div>
-          <div>
-            <p className="text-white text-xs opacity-75">Cardholder Name</p>
-            <p className="text-white font-semibold">JOHN DOE</p>
-          </div>
-          <div className="flex space-x-2">
-            <div className="w-8 h-8 bg-red-500 rounded-full"></div>
-            <div className="w-8 h-8 bg-yellow-500 rounded-full opacity-80"></div>
+          <div className="absolute w-full h-full backface-hidden rotate-y-180">
+            <Card className="relative overflow-hidden w-full h-full rounded-xl shadow-lg bg-gray-800">
+              <CardContent className="relative z-10 h-full flex flex-col justify-center items-center p-6">
+                <div className="w-full h-12 bg-gray-700 mb-4"></div>
+                <div className="text-white font-mono text-xl">
+                  CVV: {card.cvv}
+                </div>
+              </CardContent>
+            </Card>
           </div>
         </div>
-      </CardContent>
-    </Card>
-  );
+      </div>
+    );
+  };
 
   const Settings = () => (
     <Card>
@@ -318,79 +446,6 @@ const BankingDashboard = () => {
       </CardContent>
     </Card>
   );
-
-  const chartData = {
-    labels: ['January', 'February', 'March', 'April', 'May', 'June'],
-    datasets: [
-      {
-        label: 'Account Balance',
-        data: [20000, 22000, 21500, 23000, 24500, accountBalance],
-        borderColor: 'rgb(75, 192, 192)',
-        tension: 0.1
-      },
-    ],
-  };
-
-  const chartOptions = {
-    responsive: true,
-    plugins: {
-      legend: {
-        position: 'top',
-      },
-      title: {
-        display: true,
-        text: 'Account Balance Trend'
-      }
-    }
-  };
-
-  const expenseChartData = {
-    labels: ['Food', 'Transportation', 'Entertainment', 'Utilities', 'Shopping', 'Other'],
-    datasets: [
-      {
-        label: 'Expenses by Category',
-        data: [300, 150, 200, 250, 180, 120],
-        backgroundColor: [
-          'rgba(255, 99, 132, 0.5)',
-          'rgba(54, 162, 235, 0.5)',
-          'rgba(255, 206, 86, 0.5)',
-          'rgba(75, 192, 192, 0.5)',
-          'rgba(153, 102, 255, 0.5)',
-          'rgba(255, 159, 64, 0.5)',
-        ],
-        borderColor: [
-          'rgba(255, 99, 132, 1)',
-          'rgba(54, 162, 235, 1)',
-          'rgba(255, 206, 86, 1)',
-          'rgba(75, 192, 192, 1)',
-          'rgba(153, 102, 255, 1)',
-          'rgba(255, 159, 64, 1)',
-        ],
-        borderWidth: 1,
-      },
-    ],
-  };
-
-  const investmentChartData = {
-    labels: investments.map(inv => inv.name),
-    datasets: [
-      {
-        label: 'Investment Portfolio',
-        data: investments.map(inv => inv.value),
-        backgroundColor: [
-          'rgba(255, 99, 132, 0.5)',
-          'rgba(54, 162, 235, 0.5)',
-          'rgba(255, 206, 86, 0.5)',
-        ],
-        borderColor: [
-          'rgba(255, 99, 132, 1)',
-          'rgba(54, 162, 235, 1)',
-          'rgba(255, 206, 86, 1)',
-        ],
-        borderWidth: 1,
-      },
-    ],
-  };
 
   const FinancialLiteracyComponent = () => (
     <Card>
@@ -503,6 +558,290 @@ const BankingDashboard = () => {
       </CardContent>
     </Card>
   );
+
+  const TransferComponent = () => (
+    <div>
+      <h2 className="text-2xl font-bold mb-4">Transfers</h2>
+      <Card>
+        <CardHeader>
+          <CardTitle>Schedule a Transfer</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            <Input
+              type="number"
+              placeholder="Amount"
+              value={transferAmount}
+              onChange={(e) => setTransferAmount(e.target.value)}
+            />
+            <Input
+              placeholder="Recipient"
+              value={transferRecipient}
+              onChange={(e) => setTransferRecipient(e.target.value)}
+            />
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline">
+                  <CalendarIcon className="mr-2 h-4 w-4" />
+                  {transferDate ? format(transferDate, 'PPP') : <span>Pick a date</span>}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0">
+                <Calendar
+                  mode="single"
+                  selected={transferDate}
+                  onSelect={setTransferDate}
+                  initialFocus
+                />
+              </PopoverContent>
+            </Popover>
+            <div className="flex items-center space-x-2">
+              <Switch
+                id="recurring"
+                checked={isRecurring}
+                onCheckedChange={setIsRecurring}
+              />
+              <label htmlFor="recurring">Recurring Transfer</label>
+            </div>
+            {isRecurring && (
+              <Select value={recurringFrequency} onValueChange={setRecurringFrequency}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select frequency" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="weekly">Weekly</SelectItem>
+                  <SelectItem value="biweekly">Bi-weekly</SelectItem>
+                  <SelectItem value="monthly">Monthly</SelectItem>
+                </SelectContent>
+              </Select>
+            )}
+            <Button onClick={handleScheduleTransfer}>Schedule Transfer</Button>
+          </div>
+        </CardContent>
+      </Card>
+      <Card className="mt-4">
+        <CardHeader>
+          <CardTitle>Scheduled Transfers</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {scheduledTransfers.length > 0 ? (
+            <ul className="space-y-2">
+              {scheduledTransfers.map(transfer => (
+                <li key={transfer.id} className="flex justify-between items-center">
+                  <span>{transfer.recipient} - {selectedCurrency} {transfer.amount} on {transfer.date}</span>
+                  <Button variant="destructive" onClick={() => handleCancelScheduledTransfer(transfer.id)}>Cancel</Button>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p>No scheduled transfers</p>
+          )}
+        </CardContent>
+      </Card>
+      <Card className="mt-4">
+        <CardHeader>
+          <CardTitle>Transfer History</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {transferHistory.length > 0 ? (
+            <ul className="space-y-2">
+              {transferHistory.map(transfer => (
+                <li key={transfer.id}>
+                  {transfer.recipient} - {selectedCurrency} {transfer.amount} on {transfer.date}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p>No transfer history</p>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+
+  const MockCheck = ({ amount }) => (
+    <div className="border-2 border-gray-300 p-4 rounded-lg w-full max-w-md mx-auto my-4 bg-white text-black">
+      <div className="flex justify-between mb-4">
+        <div>John Doe</div>
+        <div>Date: {format(new Date(), 'MM/dd/yyyy')}</div>
+      </div>
+      <div className="flex justify-between items-center mb-4">
+        <div>Pay to the order of: ___________________</div>
+        <div className="border-b-2 border-black px-2">
+          ${amount}
+        </div>
+      </div>
+      <div className="mb-4">
+        ____________________________________________________________ Dollars
+      </div>
+      <div className="flex justify-between">
+      <div>Memo: _______________</div>
+        <div>Signature: _______________</div>
+      </div>
+    </div>
+  );
+
+  const MobileDepositComponent = () => (
+    <div>
+      <h2 className="text-2xl font-bold mb-4">Mobile Deposit</h2>
+      <Card>
+        <CardHeader>
+          <CardTitle>Deposit a Check</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {depositStep === 0 && (
+            <div>
+              <p>To deposit a check, follow these steps:</p>
+              <ol className="list-decimal list-inside mt-2 mb-4">
+                <li>Endorse the back of the check</li>
+                <li>Take a clear photo of the front and back of the check</li>
+                <li>Enter the check amount</li>
+                <li>Select the account for deposit</li>
+                <li>Submit the deposit</li>
+              </ol>
+              <Button onClick={() => setDepositStep(1)}>Start Deposit Process</Button>
+            </div>
+          )}
+          {depositStep === 1 && (
+            <div>
+              <h3 className="text-lg font-semibold mb-2">Step 1: Upload Check Image</h3>
+              <Input type="file" accept="image/*" onChange={handleCheckImageUpload} />
+              {checkImage && (
+                <div className="mt-4">
+                  <img src={checkImage} alt="Check" className="max-w-full h-auto" />
+                  <Button className="mt-2" onClick={() => setDepositStep(2)}>Next</Button>
+                </div>
+              )}
+            </div>
+          )}
+          {depositStep === 2 && (
+            <div>
+              <h3 className="text-lg font-semibold mb-2">Step 2: Confirm Check Details</h3>
+              <MockCheck amount={checkAmount} />
+              <div className="mt-4">
+                <label className="block mb-2">Check Amount:</label>
+                <Input
+                  type="number"
+                  value={checkAmount}
+                  onChange={(e) => setCheckAmount(e.target.value)}
+                  placeholder="Enter check amount"
+                />
+              </div>
+              <div className="mt-4">
+                <label className="block mb-2">Deposit Account:</label>
+                <Select value={depositAccount} onValueChange={setDepositAccount}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select account" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="checking">Checking Account</SelectItem>
+                    <SelectItem value="savings">Savings Account</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <Button className="mt-4" onClick={handleDepositSubmit}>Submit Deposit</Button>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+      <Card className="mt-4">
+        <CardHeader>
+          <CardTitle>Deposit History</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {depositHistory.length > 0 ? (
+            <ul className="space-y-2">
+              {depositHistory.map(deposit => (
+                <li key={deposit.id} className="flex justify-between items-center">
+                  <span>
+                    ${deposit.amount.toFixed(2)} to {deposit.account} account on {format(new Date(deposit.date), 'MM/dd/yyyy')}
+                  </span>
+                  <span className={`px-2 py-1 rounded ${deposit.status === 'Pending' ? 'bg-yellow-200 text-yellow-800' : 'bg-green-200 text-green-800'}`}>
+                    {deposit.status}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p>No deposit history</p>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+
+  const chartData = {
+    labels: ['January', 'February', 'March', 'April', 'May', 'June'],
+    datasets: [
+      {
+        label: 'Account Balance',
+        data: [20000, 22000, 21500, 23000, 24500, accountBalance],
+        borderColor: 'rgb(75, 192, 192)',
+        tension: 0.1
+      },
+    ],
+  };
+
+  const chartOptions = {
+    responsive: true,
+    plugins: {
+      legend: {
+        position: 'top',
+      },
+      title: {
+        display: true,
+        text: 'Account Balance Trend'
+      }
+    }
+  };
+
+  const expenseChartData = {
+    labels: ['Food', 'Transportation', 'Entertainment', 'Utilities', 'Shopping', 'Other'],
+    datasets: [
+      {
+        label: 'Expenses by Category',
+        data: [300, 150, 200, 250, 180, 120],
+        backgroundColor: [
+          'rgba(255, 99, 132, 0.5)',
+          'rgba(54, 162, 235, 0.5)',
+          'rgba(255, 206, 86, 0.5)',
+          'rgba(75, 192, 192, 0.5)',
+          'rgba(153, 102, 255, 0.5)',
+          'rgba(255, 159, 64, 0.5)',
+        ],
+        borderColor: [
+          'rgba(255, 99, 132, 1)',
+          'rgba(54, 162, 235, 1)',
+          'rgba(255, 206, 86, 1)',
+          'rgba(75, 192, 192, 1)',
+          'rgba(153, 102, 255, 1)',
+          'rgba(255, 159, 64, 1)',
+        ],
+        borderWidth: 1,
+      },
+    ],
+  };
+
+  const investmentChartData = {
+    labels: investments.map(inv => inv.name),
+    datasets: [
+      {
+        label: 'Investment Portfolio',
+        data: investments.map(inv => inv.value),
+        backgroundColor: [
+          'rgba(255, 99, 132, 0.5)',
+          'rgba(54, 162, 235, 0.5)',
+          'rgba(255, 206, 86, 0.5)',
+        ],
+        borderColor: [
+          'rgba(255, 99, 132, 1)',
+          'rgba(54, 162, 235, 1)',
+          'rgba(255, 206, 86, 1)',
+        ],
+        borderWidth: 1,
+      },
+    ],
+  };
 
   const renderContent = () => {
     switch(activeTab) {
@@ -703,82 +1042,11 @@ const BankingDashboard = () => {
       case 'investments':
         return <InvestmentComponent />;
       case 'transfers':
-        return (
-          <div>
-            <h2 className="text-2xl font-bold mb-4">Transfers</h2>
-            <AlertDialog open={isAlertOpen} onOpenChange={setIsAlertOpen}>
-              <AlertDialogTrigger asChild>
-                <Button className="w-full" onClick={() => setIsAlertOpen(true)}>
-                  Transfer Money
-                </Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>Transfer Money</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    Enter the details for your money transfer.
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <div className="grid gap-4 py-4">
-                  <div className="grid grid-cols-4 items-center gap-4">
-                    <label htmlFor="amount" className="text-right">
-                      Amount
-                    </label>
-                    <Input
-                      id="amount"
-                      type="number"
-                      className="col-span-3"
-                      value={transferAmount}
-                      onChange={(e) => setTransferAmount(e.target.value)}
-                    />
-                  </div>
-                  <div className="grid grid-cols-4 items-center gap-4">
-                    <label htmlFor="recipient" className="text-right">
-                      Recipient
-                    </label>
-                    <Input
-                      id="recipient"
-                      className="col-span-3"
-                      value={transferRecipient}
-                      onChange={(e) => setTransferRecipient(e.target.value)}
-                    />
-                  </div>
-                </div>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>Cancel</AlertDialogCancel>
-                  <AlertDialogAction onClick={handleTransferMoney}>Transfer</AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
-          </div>
-        );
-        // New function to add more to the transfers
+        return <TransferComponent />;
       case 'mobile-deposit':
-        return (
-          <div>
-            <h2 className="text-2xl font-bold mb-4">Mobile Deposit</h2>
-            <Card>
-              <CardHeader>
-                <CardTitle>Deposit a Check</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {/* Let add more function to it */}
-                <p>To deposit a check, follow these steps:</p>
-                <ol className="list-decimal list-inside mt-2">
-                  <li>Endorse the back of the check</li>
-                  <li>Take a clear photo of the front and back of the check</li>
-                  <li>Enter the check amount</li>
-                  <li>Select the account for deposit</li>
-                  <li>Submit the deposit</li>
-                </ol>
-                <Button className="mt-4">Start Deposit Process</Button>
-              </CardContent>
-            </Card>
-          </div>
-        );
+        return <MobileDepositComponent />;
       case 'settings':
-        return <Settings />;
-      default:
+        return <Settings />; default:
         return <h2 className="text-2xl font-bold">Page Not Found</h2>;
     }
   };
@@ -799,9 +1067,32 @@ const BankingDashboard = () => {
             </div>
           </div>
           <div className="flex items-center space-x-4">
-            <Button variant="ghost" size="icon">
-              <Bell size={20} />
-            </Button>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="ghost" size="icon">
+                  <Bell size={20} />
+                  {notifications.length > 0 && (
+                    <span className="absolute top-0 right-0 inline-flex items-center justify-center px-2 py-1 text-xs font-bold leading-none text-red-100 transform translate-x-1/2 -translate-y-1/2 bg-red-600 rounded-full">
+                      {notifications.length}
+                    </span>
+                  )}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-80">
+                <CardTitle className="mb-2">Notifications</CardTitle>
+                {notifications.length > 0 ? (
+                  <ul className="space-y-2">
+                    {notifications.map(notification => (
+                      <li key={notification.id} className={`p-2 rounded ${notification.type === 'warning' ? 'bg-yellow-100' : 'bg-blue-100'}`}>
+                        {notification.message}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p>No new notifications</p>
+                )}
+              </PopoverContent>
+            </Popover>
             <Button variant="ghost" size="icon">
               <Mail size={20} />
             </Button>
