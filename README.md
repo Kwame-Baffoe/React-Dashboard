@@ -5,7 +5,10 @@ This project is  a simple React JS Bank application that uses ShadCN-UI, a Chine
 
 ## What to Know!
 
-All the shadcn UI arfe written in typescritps and JSX - Pay afttnetion to the codes in the readme
+All the shadcn UI arfe written in typescritps and JSX - Pay attention to the codes in the readme
+
+# Features
+1. Virtual cards and auth Generate
 
 ### `npm start`
 
