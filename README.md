@@ -1,4 +1,4 @@
-<<<<<<< HEAD
+
 # REACT JS With ShadCN-UI
 
 This project is  a simple React JS Bank application that uses ShadCN-UI, a Chinese UI library to design. This is the first project of the kind to exist on the internet!
