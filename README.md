@@ -1,11 +1,11 @@
 <<<<<<< HEAD
-# Getting Started with Create React App
+# REACT JS With ShadCN-UI
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+This project is  a simple React JS Bank application that uses ShadCN-UI, a Chinese UI library to design. This is the first project of the kind to exist on the internet!
 
-## Available Scripts
+## What to Know!
 
-In the project directory, you can run:
+All the shadcn UI arfe written in typescritps and JSX - Pay afttnetion to the codes in the readme
 
 ### `npm start`
 
